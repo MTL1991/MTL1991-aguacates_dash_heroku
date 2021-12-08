@@ -42,6 +42,8 @@ def get_df_ohlc(pair="XXBTZUSD",interval=1,start_time=time.mktime(datetime(2000,
     data = {'time_list':time_list,'open_list':open_list,'close_list':close_list,'high_list':high_list,'low_list':low_list,'vwap_list':vwap_list}
     return pd.DataFrame(data)
 
+k = krakenex.API()
+df = get_df_ohlc()
 df_pairs = get_pairs_available()
 result = df_pairs.to_json(orient="records")
 parsed = json.loads(result)
