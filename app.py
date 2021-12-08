@@ -10,37 +10,45 @@ import time
 import pandas as pd
 import json
 
+
 def get_pairs_available():
-    posibles_valores = k.query_public('AssetPairs',data="info=info")['result']
+    posibles_valores = k.query_public('AssetPairs', data="info=info")['result']
     human_name_list = []
     api_name_list = []
     for i in posibles_valores:
         human_name_list.append(posibles_valores[i]['wsname'])
         api_name_list.append(i)
-    
-    data = {'label':human_name_list,'value':api_name_list}
+
+    data = {'label': human_name_list, 'value': api_name_list}
     return pd.DataFrame(data)
 
-def get_df_ohlc(pair="XXBTZUSD",interval=1,start_time=time.mktime(datetime(2000, 1, 1,0,0,0).timetuple())):
-    rt = k.query_public('OHLC',data="pair="+pair+"&interval="+str(interval)+"&since="+str(start_time))
-    time_list=[]
-    open_list=[]
-    close_list=[]
-    high_list=[]
-    low_list=[]
-    vwap_list=[]
+
+def get_df_ohlc(pair="XXBTZUSD", interval=1,
+                start_time=time.mktime(datetime(2000, 1, 1, 0, 0, 0) /
+                                       .timetuple())):
+    rt = k.query_public('OHLC', data="pair="+pair +
+                        "&interval="+str(interval)+"&since="+str(start_time))
+    time_list = []
+    open_list = []
+    close_list = []
+    high_list = []
+    low_list = []
+    vwap_list = []
 
     for row in rt['result'][pair]:
-        #time = datetime.utcfromtimestamp(row[0]).strftime('%Y-%m-%d %H:%M:%S')
-        time_list.append(datetime.utcfromtimestamp(row[0]).strftime('%Y-%m-%d %H:%M:%S'))
+        time_list.append(datetime.utcfromtimestamp(
+            row[0]).strftime('%Y-%m-%d %H:%M:%S'))
         open_list.append(float(row[1]))
         close_list.append(float(row[4]))
         high_list.append(float(row[2]))
         low_list.append(float(row[3]))
         vwap_list.append(float(row[5]))
-        
-    data = {'time_list':time_list,'open_list':open_list,'close_list':close_list,'high_list':high_list,'low_list':low_list,'vwap_list':vwap_list}
+
+    data = {'time_list': time_list, 'open_list': open_list,
+            'close_list': close_list, 'high_list': high_list,
+            'low_list': low_list, 'vwap_list': vwap_list}
     return pd.DataFrame(data)
+
 
 k = krakenex.API()
 df = get_df_ohlc()
@@ -64,7 +72,8 @@ app.layout = html.Div(
         html.Div(
             children=[
                 html.H1(
-                    children="Cotización criptomonedas", className="header-title"
+                    children="Cotización criptomonedas",
+                    className="header-title"
                 ),
                 html.P(
                     children="Grafico con la cotización de un par de monedas",
@@ -77,7 +86,8 @@ app.layout = html.Div(
             children=[
                 html.Div(
                     children=[
-                        html.Div(children="Par monedas", className="menu-title"),
+                        html.Div(children="Par monedas",
+                                 className="menu-title"),
                         dcc.Dropdown(
                             id='choose-pair',
                             options=parsed,
@@ -89,7 +99,8 @@ app.layout = html.Div(
                 ),
                 html.Div(
                     children=[
-                        html.Div(children="Agrupación", className="menu-title"),
+                        html.Div(children="Agrupación",
+                                 className="menu-title"),
                         dcc.Dropdown(
                             id='choose-grouptime',
                             options=[
@@ -129,34 +140,35 @@ app.layout = html.Div(
 
 
 @app.callback(
-    Output("line-chart", "figure"), 
-    [Input("choose-pair", "value"),Input("choose-grouptime", "value")])
-def update_line_chart(pair_to_call,interval_to_call):
+    Output("line-chart", "figure"),
+    [Input("choose-pair", "value"), Input("choose-grouptime", "value")])
+def update_line_chart(pair_to_call, interval_to_call):
     fig = go.Figure()
-    if interval_to_call == None:
-        interval_to_call=5
-    if pair_to_call!=None:
-        df = get_df_ohlc(pair=pair_to_call,interval=interval_to_call)
+    if interval_to_call is None:
+        interval_to_call = 5
+    if pair_to_call is None:
+        df = get_df_ohlc(pair=pair_to_call, interval=interval_to_call)
         velas = go.Candlestick(x=df.time_list,
-                                open=df.open_list,
-                                high=df.high_list,
-                                low=df.low_list,
-                                close=df.close_list,
-                                xaxis="x",
-                                yaxis="y",
-                                name='cotizacion',
-                                visible=True)
+                               open=df.open_list,
+                               high=df.high_list,
+                               low=df.low_list,
+                               close=df.close_list,
+                               xaxis="x",
+                               yaxis="y",
+                               name='cotizacion',
+                               visible=True)
         linea = go.Scatter(
-                x=df.time_list,
-                y=df.vwap_list,
-                mode='lines',
-                name='vwap'
+            x=df.time_list,
+            y=df.vwap_list,
+            mode='lines',
+            name='vwap'
 
-            )
+        )
         fig.add_trace(velas)
         fig.add_trace(linea)
         fig.update(layout_xaxis_rangeslider_visible=False)
     return fig
+
 
 if __name__ == "__main__":
     app.run_server(debug=True)
