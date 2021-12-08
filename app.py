@@ -1,13 +1,46 @@
 import dash
-from dash import dcc
-from dash import html
-import pandas as pd
-import numpy as np
-from dash.dependencies import Output, Input
+import dash_bootstrap_components as dbc
+import plotly.graph_objects as go
+from dash import Input, Output, dcc, html
 
-data = pd.read_csv("avocado.csv")
-data["Date"] = pd.to_datetime(data["Date"], format="%Y-%m-%d")
-data.sort_values("Date", inplace=True)
+
+import krakenex
+from datetime import datetime
+import time
+import pandas as pd
+import json
+
+def get_pairs_available():
+    posibles_valores = k.query_public('AssetPairs',data="info=info")['result']
+    human_name_list = []
+    api_name_list = []
+    for i in posibles_valores:
+        human_name_list.append(posibles_valores[i]['wsname'])
+        api_name_list.append(i)
+    
+    data = {'label':human_name_list,'value':api_name_list}
+    return pd.DataFrame(data)
+
+def get_df_ohlc(pair="XXBTZUSD",interval=1,start_time=time.mktime(datetime(2000, 1, 1,0,0,0).timetuple())):
+    rt = k.query_public('OHLC',data="pair="+pair+"&interval="+str(interval)+"&since="+str(start_time))
+    time_list=[]
+    open_list=[]
+    close_list=[]
+    high_list=[]
+    low_list=[]
+    vwap_list=[]
+
+    for row in rt['result'][pair]:
+        #time = datetime.utcfromtimestamp(row[0]).strftime('%Y-%m-%d %H:%M:%S')
+        time_list.append(datetime.utcfromtimestamp(row[0]).strftime('%Y-%m-%d %H:%M:%S'))
+        open_list.append(float(row[1]))
+        close_list.append(float(row[4]))
+        high_list.append(float(row[2]))
+        low_list.append(float(row[3]))
+        vwap_list.append(float(row[5]))
+        
+    data = {'time_list':time_list,'open_list':open_list,'close_list':close_list,'high_list':high_list,'low_list':low_list,'vwap_list':vwap_list}
+    return pd.DataFrame(data)
 
 external_stylesheets = [
     {
@@ -17,21 +50,26 @@ external_stylesheets = [
     },
 ]
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
-app.title = "Analisis del aguacate"
-server = app.server
+app.title = "Analisis criptomonedas"
+
+app = dash.Dash(__name__)
+k = krakenex.API()
+df = get_df_ohlc()
+
+df_pairs = get_pairs_available()
+result = df_pairs.to_json(orient="records")
+parsed = json.loads(result)
+
 
 app.layout = html.Div(
     children=[
         html.Div(
             children=[
-                html.P(children="🥑", className="header-emoji"),
                 html.H1(
-                    children="Analisis del Aguacate", className="header-title"
+                    children="Cotización criptomonedas", className="header-title"
                 ),
                 html.P(
-                    children="Analizar el comportamiento del precio del aguacate"
-                             " y el numero de aguacates vendidos en US"
-                             " entre 2015 y 2018",
+                    children="Grafico con la cotización de un par de monedas",
                     className="header-description",
                 ),
             ],
@@ -41,49 +79,38 @@ app.layout = html.Div(
             children=[
                 html.Div(
                     children=[
-                        html.Div(children="Region", className="menu-title"),
+                        html.Div(children="Par monedas", className="menu-title"),
                         dcc.Dropdown(
-                            id="filtro-region",
-                            options=[
-                                {"label": region, "value": region}
-                                for region in np.sort(data.region.unique())
-                            ],
-                            value="Albany",
+                            id='choose-pair',
+                            options=parsed,
+                            value='XBTUSDC',
                             clearable=False,
                             className="dropdown",
-                        ),
+                        )
                     ]
                 ),
                 html.Div(
                     children=[
-                        html.Div(children="Type", className="menu-title"),
+                        html.Div(children="Agrupación", className="menu-title"),
                         dcc.Dropdown(
-                            id="filtro-tipo",
+                            id='choose-grouptime',
                             options=[
-                                {"label": avocado_type, "value": avocado_type}
-                                for avocado_type in data.type.unique()
+                                {'label': '1 minuto', 'value': 1},
+                                {'label': '5 minutos', 'value': 5},
+                                {'label': '15 minutos', 'value': 15},
+                                {'label': '30 minutos', 'value': 30},
+                                {'label': '1 hora', 'value': 60},
+                                {'label': '4 hora', 'value': 240},
+                                {'label': '1 dia', 'value': 1440},
+                                {'label': '1 semana', 'value': 10080},
+                                {'label': '15 dias', 'value': 21600},
                             ],
-                            value="organic",
+                            value=60,
                             clearable=False,
                             searchable=False,
                             className="dropdown",
                         ),
                     ],
-                ),
-                html.Div(
-                    children=[
-                        html.Div(
-                            children="Date Range",
-                            className="menu-title"
-                            ),
-                        dcc.DatePickerRange(
-                            id="rango-fecha",
-                            min_date_allowed=data.Date.min().date(),
-                            max_date_allowed=data.Date.max().date(),
-                            start_date=data.Date.min().date(),
-                            end_date=data.Date.max().date(),
-                        ),
-                    ]
                 ),
             ],
             className="menu",
@@ -92,13 +119,7 @@ app.layout = html.Div(
             children=[
                 html.Div(
                     children=dcc.Graph(
-                        id="grafica-precio", config={"displayModeBar": False},
-                    ),
-                    className="card",
-                ),
-                html.Div(
-                    children=dcc.Graph(
-                        id="grafica-volumen", config={"displayModeBar": False},
+                        id="line-chart", config={"displayModeBar": False},
                     ),
                     className="card",
                 ),
@@ -109,65 +130,36 @@ app.layout = html.Div(
 )
 
 
+
 @app.callback(
-    [Output("grafica-precio", "figure"), Output("grafica-volumen", "figure")],
-    [
-        Input("filtro-region", "value"),
-        Input("filtro-tipo", "value"),
-        Input("rango-fecha", "start_date"),
-        Input("rango-fecha", "end_date"),
-    ],
-)
-def update_charts(region, avocado_type, start_date, end_date):
-    mask = (
-        (data.region == region)
-        & (data.type == avocado_type)
-        & (data.Date >= start_date)
-        & (data.Date <= end_date)
-    )
-    filtered_data = data.loc[mask, :]
-    price_chart_figure = {
-        "data": [
-            {
-                "x": filtered_data["Date"],
-                "y": filtered_data["AveragePrice"],
-                "type": "lines",
-                "hovertemplate": "$%{y:.2f}<extra></extra>",
-            },
-        ],
-        "layout": {
-            "title": {
-                "text": "Average Price of Avocados",
-                "x": 0.05,
-                "xanchor": "left",
-            },
-            "xaxis": {"fixedrange": True},
-            "yaxis": {"tickprefix": "$", "fixedrange": True},
-            "colorway": ["#17B897"],
-        },
-    }
+    Output("line-chart", "figure"), 
+    [Input("choose-pair", "value"),Input("choose-grouptime", "value")])
+def update_line_chart(pair_to_call,interval_to_call):
+    fig = go.Figure()
+    if interval_to_call == None:
+        interval_to_call=5
+    if pair_to_call!=None:
+        df = get_df_ohlc(pair=pair_to_call,interval=interval_to_call)
+        velas = go.Candlestick(x=df.time_list,
+                                open=df.open_list,
+                                high=df.high_list,
+                                low=df.low_list,
+                                close=df.close_list,
+                                xaxis="x",
+                                yaxis="y",
+                                name='cotizacion',
+                                visible=True)
+        linea = go.Scatter(
+                x=df.time_list,
+                y=df.vwap_list,
+                mode='lines',
+                name='vwap'
 
-    volume_chart_figure = {
-        "data": [
-            {
-                "x": filtered_data["Date"],
-                "y": filtered_data["Total Volume"],
-                "type": "lines",
-            },
-        ],
-        "layout": {
-            "title": {
-                "text": "Avocados Sold",
-                "x": 0.05,
-                "xanchor": "left"
-            },
-            "xaxis": {"fixedrange": True},
-            "yaxis": {"fixedrange": True},
-            "colorway": ["#E12D39"],
-        },
-    }
-    return price_chart_figure, volume_chart_figure
-
+            )
+        fig.add_trace(velas)
+        fig.add_trace(linea)
+        fig.update(layout_xaxis_rangeslider_visible=False)
+    return fig
 
 if __name__ == "__main__":
     app.run_server(debug=True)
